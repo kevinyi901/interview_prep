@@ -11,6 +11,61 @@ def hello_world():
     """Return a simple hello world response."""
     return jsonify({"hello": "world"}), 200
 
+############################################    
+data_store = {"people": [], "tasks": []}
 
+@app.route('/people', methods=['POST'])
+def ingest_people():
+    with open('people.csv') as f:
+        reader = csv.DictReader(f)
+        data_store["people"] = list(reader)
+    return jsonify(data_store["people"]), 200
+
+@app.route('/people', methods=['GET'])
+def get_people():
+    return jsonify(data_store["people"]), 200
+
+
+
+
+@app.route('/tasks', methods=['POST'])
+def ingest_tasks():
+    with open('tasks.csv') as f:
+        reader = csv.DictReader(f)
+        data_store["tasks"] = list(reader)
+    return jsonify(data_store["tasks"]), 200
+
+@app.route('/tasks', methods=['GET'])
+def get_tasks():
+    return jsonify(data_store["tasks"]), 200
+
+## Matching and Grouping Endpoints
+
+@app.route('/people/groups', methods=['GET'])
+def group_people():
+    groups = {}
+    for person in data_store["people"]:
+        skill = person["skill"]
+        if skill not in groups:
+            groups[skill] = []
+        groups[skill].append(person)
+    return jsonify(groups), 200
+
+@app.route('/match', methods=['GET'])
+def match_people_to_tasks():
+    matches = []
+    for task in data_store["tasks"]:
+        matched_people = [
+            p for p in data_store["people"]
+            if p["skill"] == task["category"]
+        ]
+        matches.append({
+            "task": task,
+            "people": matched_people
+        })
+    return jsonify(matches), 200
+############################################
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
+
+

@@ -1,0 +1,6 @@
+id,title,category
+1,Build API,backend
+2,Design UI,frontend
+3,Train model,data
+4,Write tests,backend
+5,Create dashboard,frontend
