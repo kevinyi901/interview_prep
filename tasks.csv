@@ -1,6 +1,6 @@
-id,title,category
-1,Build API,backend
-2,Design UI,frontend
-3,Train model,data
-4,Write tests,backend
-5,Create dashboard,frontend
+id,title,category,difficulty
+1,Build API,backend,hard
+2,Design UI,frontend,medium
+3,Train model,data,hard
+4,Write tests,backend,easy
+5,Create dashboard,frontend,medium

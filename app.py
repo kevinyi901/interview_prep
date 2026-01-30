@@ -1,7 +1,7 @@
 """Flask API for interview prep - People and Tasks management."""
 import csv
 import json
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 
 app = Flask(__name__)
 
@@ -11,29 +11,39 @@ def hello_world():
     """Return a simple hello world response."""
     return jsonify({"hello": "world"}), 200
 
-############################################    
+############################################
 data_store = {"people": [], "tasks": []}
 
-@app.route('/people', methods=['POST'])
-def ingest_people():
+## CSV ingestion
+@app.route('/people/csv', methods=['POST'])
+def ingest_people_csv():
     with open('people.csv') as f:
-        reader = csv.DictReader(f)
-        data_store["people"] = list(reader)
+        data_store["people"] = list(csv.DictReader(f))
     return jsonify(data_store["people"]), 200
 
+@app.route('/tasks/csv', methods=['POST'])
+def ingest_tasks_csv():
+    with open('tasks.csv') as f:
+        data_store["tasks"] = list(csv.DictReader(f))
+    return jsonify(data_store["tasks"]), 200
+
+## JSON ingestion
+@app.route('/people/json', methods=['POST'])
+def ingest_people_json():
+    with open('people.json') as f:
+        data_store["people"] = json.load(f)
+    return jsonify(data_store["people"]), 200
+
+@app.route('/tasks/json', methods=['POST'])
+def ingest_tasks_json():
+    with open('tasks.json') as f:
+        data_store["tasks"] = json.load(f)
+    return jsonify(data_store["tasks"]), 200
+
+## GET endpoints
 @app.route('/people', methods=['GET'])
 def get_people():
     return jsonify(data_store["people"]), 200
-
-
-
-
-@app.route('/tasks', methods=['POST'])
-def ingest_tasks():
-    with open('tasks.csv') as f:
-        reader = csv.DictReader(f)
-        data_store["tasks"] = list(reader)
-    return jsonify(data_store["tasks"]), 200
 
 @app.route('/tasks', methods=['GET'])
 def get_tasks():

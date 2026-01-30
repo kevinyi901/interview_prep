@@ -1,0 +1,7 @@
+[
+    {"id": "1", "title": "Build API", "category": "backend", "difficulty": "hard"},
+    {"id": "2", "title": "Design UI", "category": "frontend", "difficulty": "medium"},
+    {"id": "3", "title": "Train model", "category": "data", "difficulty": "hard"},
+    {"id": "4", "title": "Write tests", "category": "backend", "difficulty": "easy"},
+    {"id": "5", "title": "Create dashboard", "category": "frontend", "difficulty": "medium"}
+]
