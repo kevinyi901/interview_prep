@@ -1,6 +1,7 @@
-id,title,category,difficulty
-1,Build API,backend,hard
-2,Design UI,frontend,medium
-3,Train model,data,hard
-4,Write tests,backend,easy
-5,Create dashboard,frontend,medium
+customer,project_id,category,prompt,response
+Acme Corp,proj_1,math,What is 2+2?,2+2 equals 4.
+Acme Corp,proj_1,math,What is 10/0?,10 divided by 0 is 10.
+Beta Inc,proj_2,writing,Write a haiku about rain.,"Drops fall from the sky, puddles form on quiet streets, earth drinks and is still."
+Beta Inc,proj_3,coding,Write a Python hello world.,print('Hello World!')
+Beta Inc,proj_3,coding,What is a for loop?,A for loop repeats code a set number of times.
+Acme Corp,proj_4,writing,Summarize World War 2.,It was a big war.
