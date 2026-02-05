@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scale AI System Design — Revised Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface-2: #1a2236;
+    --border: #2a3654;
+    --text: #e2e8f0;
+    --text-muted: #8892a8;
+    --accent-blue: #3b82f6;
+    --accent-cyan: #06b6d4;
+    --accent-green: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-purple: #8b5cf6;
+    --accent-pink: #ec4899;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 40px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--accent-cyan);
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-bottom: 48px;
+    font-weight: 300;
+  }
+
+  .diagram-section {
+    margin-bottom: 64px;
+  }
+
+  .section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent-amber);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: var(--accent-amber);
+    border-radius: 2px;
+  }
+
+  .arch-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .arch-row {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .arch-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    min-width: 200px;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .arch-box:hover {
+    border-color: var(--accent-blue);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.1);
+  }
+
+  .arch-box .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .arch-box .desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .arch-box .desc li {
+    margin-bottom: 2px;
+  }
+
+  .tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+
+  .tag-customer { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+  .tag-api { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+  .tag-routing { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+  .tag-cache { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+  .tag-blackbox { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+  .tag-storage { background: rgba(236, 72, 153, 0.15); color: var(--accent-pink); }
+  .tag-queue { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+  .tag-money { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+  .tag-primary { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+
+  .arrow-down {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+  }
+
+  .arrow-down svg {
+    width: 24px;
+    height: 32px;
+    color: var(--border);
+  }
+
+  .wide-box { width: 100%; max-width: 700px; }
+
+  .dual-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .highlight-note {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--accent-amber);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  .green-note {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--accent-green);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  .cyan-note {
+    background: rgba(6, 182, 212, 0.08);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--accent-cyan);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+
+  .flow-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+  }
+
+  .flow-step .step-text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .flow-step .step-text strong {
+    color: var(--accent-cyan);
+  }
+
+  .fan-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .fan-single {
+    background: var(--surface);
+    border: 1px solid var(--accent-green);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent-green);
+    text-align: center;
+  }
+
+  .page-break {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .cost-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .cost-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .cost-card h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .bar-container {
+    height: 28px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    position: relative;
+  }
+
+  .bar {
+    height: 100%;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    transition: width 0.8s ease;
+  }
+
+  .bar-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .savings-callout {
+    background: rgba(16, 185, 129, 0.1);
+    border: 2px solid var(--accent-green);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin: 20px 0;
+  }
+
+  .savings-callout .big-number {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--accent-green);
+  }
+
+  .savings-callout .label {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .timeline-container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .timeline-row {
+    display: grid;
+    grid-template-columns: 180px 1fr 60px;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .timeline-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+
+  .timeline-bar-container {
+    height: 32px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .timeline-bar {
+    height: 100%;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: white;
+    font-weight: 600;
+    position: absolute;
+    top: 0;
+  }
+
+  .timeline-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .priority-list {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .priority-item {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 10px;
+  }
+
+  .priority-rank {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    min-width: 30px;
+  }
+
+  .priority-content h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .priority-content p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .priority-savings {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .vs-container {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 20px;
+    align-items: center;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .vs-box {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .vs-divider {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+
+<h1>Scale AI — Content Classification System (Revised)</h1>
+<p class="subtitle">Priority: Parallelism → Smart Batching → Async Writes → Queue Management → Conditional Caching</p>
+
+<!-- ===== OPTIMIZATION PRIORITIES ===== -->
+<div class="diagram-section">
+  <div class="section-title">Optimization Priority Order</div>
+  <div class="priority-list">
+    <div class="priority-item" style="border-color: var(--accent-cyan);">
+      <div class="priority-rank" style="color: var(--accent-cyan);">#1</div>
+      <div class="priority-content">
+        <h4 style="color: var(--accent-cyan);">Parallelism for Black Box 1</h4>
+        <p>Run all Black Box 1 calls at the same time instead of one after another. 2,000 files goes from 4,000 milliseconds to 400 milliseconds. Works regardless of whether files are unique or repeated.</p>
+      </div>
+      <div class="priority-savings" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">90% latency cut</div>
+    </div>
+    <div class="priority-item" style="border-color: var(--accent-blue);">
+      <div class="priority-rank" style="color: var(--accent-blue);">#2</div>
+      <div class="priority-content">
+        <h4 style="color: var(--accent-blue);">Maximum Batch Filling</h4>
+        <p>Always fill Black Box 1 to its 200-file capacity. Sending 40 half-empty batches costs 4x more than 10 full batches for the same 2,000 files.</p>
+      </div>
+      <div class="priority-savings" style="background: rgba(59, 130, 246, 0.15); color: var(--accent-blue);">75% fewer calls</div>
+    </div>
+    <div class="priority-item" style="border-color: var(--accent-green);">
+      <div class="priority-rank" style="color: var(--accent-green);">#3</div>
+      <div class="priority-content">
+        <h4 style="color: var(--accent-green);">Asynchronous Storage Writes</h4>
+        <p>Save results and embeddings to the database in the background. Don't make the customer wait while we write to disk. Shaves 50–100 milliseconds off every single request.</p>
+      </div>
+      <div class="priority-savings" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">50-100ms saved</div>
+    </div>
+    <div class="priority-item" style="border-color: var(--accent-purple);">
+      <div class="priority-rank" style="color: var(--accent-purple);">#4</div>
+      <div class="priority-content">
+        <h4 style="color: var(--accent-purple);">Queue-Based Load Leveling</h4>
+        <p>For the batch path, a task queue absorbs traffic spikes so workers process at a steady, efficient rate. Prevents the system from crashing under sudden load.</p>
+      </div>
+      <div class="priority-savings" style="background: rgba(139, 92, 246, 0.15); color: var(--accent-purple);">System stability</div>
+    </div>
+    <div class="priority-item" style="border-color: var(--text-muted); border-style: dashed;">
+      <div class="priority-rank" style="color: var(--text-muted);">#5</div>
+      <div class="priority-content">
+        <h4 style="color: var(--text-muted);">Embedding Cache (Conditional)</h4>
+        <p>Valuable for content moderation (same image flagged thousands of times). Low value for unique content classification. Build it, instrument the hit rate, scale based on real data.</p>
+      </div>
+      <div class="priority-savings" style="background: rgba(255,255,255,0.05); color: var(--text-muted);">Depends on use case</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FULL ARCHITECTURE ===== -->
+<div class="diagram-section page-break">
+  <div class="section-title">Full System Architecture</div>
+  <div class="arch-container">
+
+    <!-- Customer -->
+    <div class="arch-row">
+      <div class="arch-box wide-box" style="border-color: var(--accent-blue);">
+        <span class="tag tag-customer">CUSTOMER</span>
+        <div class="label" style="color: var(--accent-blue);">Customer Application</div>
+        <div class="desc">
+          Sends files (images, text, documents) to be classified.<br>
+          <strong style="color: var(--accent-cyan);">Real-Time Mode</strong> — "Classify these 30 files now, I'll wait"<br>
+          <strong style="color: var(--accent-purple);">Batch Mode</strong> — "Here are 10,000 files, I'll check back later"
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- Gateway -->
+    <div class="arch-row">
+      <div class="arch-box wide-box" style="border-color: var(--accent-cyan);">
+        <span class="tag tag-api">ENTRY POINT</span>
+        <div class="label" style="color: var(--accent-cyan);">Gateway (The Front Door)</div>
+        <div class="desc">
+          <ul>
+            <li><strong>Identity Check:</strong> Verifies the customer's key</li>
+            <li><strong>Rate Limiting:</strong> Prevents any single customer from overwhelming the system</li>
+            <li><strong>Routing:</strong> Sends to real-time or batch path based on which address the customer called</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Split -->
+    <div style="display: flex; justify-content: center; gap: 280px; padding: 16px 0;">
+      <div style="text-align: center;">
+        <svg width="24" height="40" viewBox="0 0 24 40"><path d="M12 0 L12 36 M6 30 L12 36 L18 30" stroke="var(--accent-cyan)" stroke-width="2" fill="none"/></svg>
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-cyan);">Real-Time Path</div>
+      </div>
+      <div style="text-align: center;">
+        <svg width="24" height="40" viewBox="0 0 24 40"><path d="M12 0 L12 36 M6 30 L12 36 L18 30" stroke="var(--accent-purple)" stroke-width="2" fill="none"/></svg>
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-purple);">Batch Path</div>
+      </div>
+    </div>
+
+    <!-- Two Paths -->
+    <div class="arch-row">
+      <div class="arch-box" style="border-color: var(--accent-cyan); flex: 1; max-width: 340px;">
+        <span class="tag tag-api">SPEED PRIORITY</span>
+        <div class="label" style="color: var(--accent-cyan);">Real-Time Service</div>
+        <div class="desc">
+          <ul>
+            <li>Small requests (1–50 files)</li>
+            <li>Processes immediately</li>
+            <li>Goal: under 1 second</li>
+            <li>Does NOT wait to fill batches</li>
+          </ul>
+        </div>
+      </div>
+      <div class="arch-box" style="border-color: var(--accent-purple); flex: 1; max-width: 340px;">
+        <span class="tag tag-routing">COST PRIORITY</span>
+        <div class="label" style="color: var(--accent-purple);">Batch Ingestion Service</div>
+        <div class="desc">
+          <ul>
+            <li>Large requests (100s–10,000s of files)</li>
+            <li>Returns a job identifier immediately</li>
+            <li>Saves job record to database</li>
+            <li>Chunks files into groups of 200, places in queue</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- Queue -->
+    <div class="arch-row">
+      <div class="arch-box" style="border-color: transparent; flex: 1; max-width: 340px; background: transparent; border: none; padding: 20px;">
+        <div style="text-align: center; color: var(--text-muted); font-size: 13px; font-style: italic;">
+          (Skips queue — goes directly<br>to orchestrator)
+        </div>
+      </div>
+      <div class="arch-box" style="border-color: var(--accent-red); flex: 1; max-width: 340px;">
+        <span class="tag tag-queue">BUFFER</span>
+        <div class="label" style="color: var(--accent-red);">Task Queue</div>
+        <div class="desc">
+          <ul>
+            <li>Holds chunks of 200 files waiting to be processed</li>
+            <li>Workers pull tasks at their own pace</li>
+            <li>Absorbs traffic spikes</li>
+            <li>If a worker crashes, task returns to queue automatically</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- Orchestration — THE CORE -->
+    <div class="arch-row">
+      <div class="arch-box wide-box" style="border-color: var(--accent-green); background: rgba(16, 185, 129, 0.03);">
+        <span class="tag tag-primary">CORE ENGINE — WHERE THE OPTIMIZATIONS LIVE</span>
+        <div class="label" style="color: var(--accent-green);">Orchestration Layer</div>
+        <div class="desc" style="margin-bottom: 16px;">
+          Both paths converge here. This layer coordinates calls to both black box services using the optimizations that save time and money.
+        </div>
+        <div class="dual-column">
+          <div style="background: var(--surface-2); border-radius: 8px; padding: 14px;">
+            <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">Step A: Embedding Phase (Fan-Out)</div>
+            <div class="desc">
+              <ol>
+                <li><strong style="color: var(--accent-green);">[Optional]</strong> Check embedding cache</li>
+                <li>Split files into chunks of 200 (Black Box 1's limit)</li>
+                <li><strong style="color: var(--accent-cyan);">Run ALL chunks in parallel</strong> — this is the #1 optimization</li>
+                <li>Collect all embeddings as they return</li>
+              </ol>
+            </div>
+          </div>
+          <div style="background: var(--surface-2); border-radius: 8px; padding: 14px;">
+            <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-bottom: 6px;">Step B: Classification Phase (Fan-In)</div>
+            <div class="desc">
+              <ol>
+                <li>Accumulate all embeddings (up to 2,000)</li>
+                <li>Send one large request to Black Box 2</li>
+                <li>Get labels + confidence scores back</li>
+                <li><strong style="color: var(--accent-green);">Save results in background</strong> — don't block response</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+        <div class="cyan-note">
+          🔑 The three guaranteed optimizations: (1) Parallel Black Box 1 calls, (2) Full batches of 200, (3) Background storage writes. These save money regardless of whether content is unique or repeated.
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- Optional Cache -->
+    <div class="arch-row">
+      <div class="arch-box wide-box" style="border-color: var(--text-muted); border-style: dashed; background: rgba(255,255,255,0.01);">
+        <span class="tag" style="background: rgba(255,255,255,0.05); color: var(--text-muted);">CONDITIONAL — DEPENDS ON USE CASE</span>
+        <div class="label" style="color: var(--text-muted);">Embedding Cache (Redis)</div>
+        <div class="desc">
+          <strong>High value:</strong> Content moderation (same spam/viral content flagged thousands of times)<br>
+          <strong>Low value:</strong> Unique content classification (each file is different, cache rarely hit)<br><br>
+          <strong>Strategy:</strong> Build the cache layer, instrument the hit rate, scale up if hit rate exceeds 10%, scale down if it doesn't.
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- Black Boxes -->
+    <div class="arch-row">
+      <div class="arch-box" style="border-color: var(--accent-amber); flex: 1; max-width: 340px; background: rgba(245, 158, 11, 0.03);">
+        <span class="tag tag-blackbox">BLACK BOX 1 — THE BOTTLENECK</span>
+        <div class="label" style="color: var(--accent-amber);">Embedding Generation</div>
+        <div class="desc">
+          <ul>
+            <li><strong>Input:</strong> Files</li>
+            <li><strong>Output:</strong> Embedding vectors</li>
+            <li><strong>Limit:</strong> 200 files per call</li>
+            <li><strong>Speed:</strong> ~400ms per call</li>
+          </ul>
+        </div>
+        <div class="highlight-note">
+          For 2,000 files → 10 calls needed.<br>
+          Sequential: 4,000ms. Parallel: 400ms.
+        </div>
+      </div>
+      <div class="arch-box" style="border-color: var(--accent-amber); flex: 1; max-width: 340px; background: rgba(245, 158, 11, 0.03);">
+        <span class="tag tag-blackbox">BLACK BOX 2</span>
+        <div class="label" style="color: var(--accent-amber);">Classification</div>
+        <div class="desc">
+          <ul>
+            <li><strong>Input:</strong> Embeddings</li>
+            <li><strong>Output:</strong> {label: confidence} dictionaries</li>
+            <li><strong>Limit:</strong> 2,000 embeddings per call</li>
+            <li><strong>Speed:</strong> ~200ms per call</li>
+          </ul>
+        </div>
+        <div class="green-note">
+          For 2,000 files → only 1 call needed. Already efficient.
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- Storage -->
+    <div class="arch-row">
+      <div class="arch-box" style="border-color: var(--accent-pink); flex: 1; max-width: 220px;">
+        <span class="tag tag-storage">DATABASE</span>
+        <div class="label" style="color: var(--accent-pink); font-size: 13px;">PostgreSQL</div>
+        <div class="desc">
+          <ul>
+            <li>Classification results</li>
+            <li>Job status &amp; progress</li>
+            <li>Embedding metadata</li>
+            <li>Customer usage analytics</li>
+          </ul>
+        </div>
+      </div>
+      <div class="arch-box" style="border-color: var(--accent-pink); flex: 1; max-width: 220px;">
+        <span class="tag tag-storage">FAST STORAGE</span>
+        <div class="label" style="color: var(--accent-pink); font-size: 13px;">Redis</div>
+        <div class="desc">
+          <ul>
+            <li>Embedding cache (if enabled)</li>
+            <li>Rate limit counters</li>
+            <li>Task queue (for batch path)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="arch-box" style="border-color: var(--accent-pink); flex: 1; max-width: 220px;">
+        <span class="tag tag-storage">FILE STORAGE</span>
+        <div class="label" style="color: var(--accent-pink); font-size: 13px;">Amazon S3</div>
+        <div class="desc">
+          <ul>
+            <li>Embedding vectors (for debugging)</li>
+            <li>Original files</li>
+            <li>Model artifacts</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PARALLELISM DEEP DIVE ===== -->
+<div class="diagram-section page-break">
+  <div class="section-title">Deep Dive: Parallelism — Why It's the #1 Optimization</div>
+
+  <p style="color: var(--text-muted); margin-bottom: 32px; font-size: 14px; max-width: 800px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+    The biggest win comes from running Black Box 1 calls at the same time instead of one after another. This works for EVERY request — unique files, repeated files, doesn't matter. Here's the visual difference:
+  </p>
+
+  <!-- Sequential vs Parallel -->
+  <div class="vs-container" style="margin-bottom: 40px;">
+    <div class="vs-box" style="border: 1px solid var(--accent-red);">
+      <h3 style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-red); margin-bottom: 16px;">❌ Sequential (One After Another)</h3>
+      <div class="timeline-container">
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">Black Box 1 — files 1-200</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-amber);">400ms</div></div>
+        </div>
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">Black Box 1 — files 201-400</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-amber);">400ms</div></div>
+        </div>
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">Black Box 1 — files 401-600</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-amber);">400ms</div></div>
+        </div>
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">Black Box 1 — files 601-800</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-amber);">400ms</div></div>
+        </div>
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">Black Box 1 — files 801-1000</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-amber);">400ms</div></div>
+        </div>
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">Black Box 2 — all 1000 embeddings</div>
+          <div class="bar-container"><div class="bar" style="width: 50%; background: var(--accent-green);">200ms</div></div>
+        </div>
+        <div style="margin-top: 12px; font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-red);">
+          Total: 2,200ms ❌
+        </div>
+      </div>
+    </div>
+
+    <div class="vs-divider">vs</div>
+
+    <div class="vs-box" style="border: 1px solid var(--accent-green);">
+      <h3 style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-green); margin-bottom: 16px;">✅ Parallel (All At Once)</h3>
+      <div class="timeline-container">
+        <div style="margin-bottom: 6px;">
+          <div class="bar-label">All 5 Black Box 1 calls running simultaneously</div>
+          <div class="bar-container">
+            <div class="bar" style="width: 100%; background: var(--accent-amber);">files 1-200</div>
+          </div>
+          <div class="bar-container" style="margin-top: 2px;"><div class="bar" style="width: 100%; background: rgba(245, 158, 11, 0.7);">files 201-400</div></div>
+          <div class="bar-container" style="margin-top: 2px;"><div class="bar" style="width: 100%; background: rgba(245, 158, 11, 0.5);">files 401-600</div></div>
+          <div class="bar-container" style="margin-top: 2px;"><div class="bar" style="width: 100%; background: rgba(245, 158, 11, 0.4);">files 601-800</div></div>
+          <div class="bar-container" style="margin-top: 2px;"><div class="bar" style="width: 100%; background: rgba(245, 158, 11, 0.3);">files 801-1000</div></div>
+        </div>
+        <div style="margin-bottom: 6px; margin-top: 12px;">
+          <div class="bar-label">Black Box 2 — all 1000 embeddings</div>
+          <div class="bar-container"><div class="bar" style="width: 50%; background: var(--accent-green);">200ms</div></div>
+        </div>
+        <div style="margin-top: 12px; font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-green);">
+          Total: 600ms ✅
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="savings-callout">
+    <div class="big-number">73% Faster</div>
+    <div class="label">2,200ms → 600ms for 1,000 files — just by running calls at the same time</div>
+  </div>
+</div>
+
+<!-- ===== COST SAVINGS BREAKDOWN ===== -->
+<div class="diagram-section page-break">
+  <div class="section-title">How We Save Scale AI Money (Concrete Numbers)</div>
+
+  <p style="color: var(--text-muted); margin-bottom: 32px; font-size: 14px; max-width: 800px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+    Assume Scale AI processes 10 million files per day. Here's how each optimization translates to real cost savings, assuming Black Box 1 costs $0.01 per call and Black Box 2 costs $0.005 per call.
+  </p>
+
+  <!-- SAVING 1 -->
+  <div class="cost-card" style="max-width: 900px; margin: 0 auto 20px;">
+    <h3 style="color: var(--accent-blue);">💰 Saving #1: Smart Batching (Always Full Batches of 200)</h3>
+    <div class="cost-grid" style="max-width: 100%;">
+      <div>
+        <div class="bar-label">❌ Without smart batching (average 50 files per call)</div>
+        <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-red);">200,000 calls/day</div></div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-red); margin-top: 4px;">10M files ÷ 50 per call = 200,000 calls × $0.01 = $2,000/day</div>
+      </div>
+      <div>
+        <div class="bar-label">✅ With smart batching (always 200 files per call)</div>
+        <div class="bar-container"><div class="bar" style="width: 25%; background: var(--accent-green);">50,000 calls/day</div></div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-top: 4px;">10M files ÷ 200 per call = 50,000 calls × $0.01 = $500/day</div>
+      </div>
+    </div>
+    <div class="savings-callout" style="margin-top: 16px;">
+      <div class="big-number">$1,500/day saved</div>
+      <div class="label">$547,500 per year — just by filling batches to capacity</div>
+    </div>
+  </div>
+
+  <!-- SAVING 2 -->
+  <div class="cost-card" style="max-width: 900px; margin: 0 auto 20px;">
+    <h3 style="color: var(--accent-cyan);">💰 Saving #2: Parallelism Enables Fewer Compute Resources</h3>
+    <div class="cost-grid" style="max-width: 100%;">
+      <div>
+        <div class="bar-label">❌ Sequential processing — need many workers to meet throughput</div>
+        <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-red);">20 worker machines</div></div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-red); margin-top: 4px;">Each worker processes 1 batch at a time, needs many to keep up</div>
+      </div>
+      <div>
+        <div class="bar-label">✅ Parallel processing — each worker handles many batches at once</div>
+        <div class="bar-container"><div class="bar" style="width: 20%; background: var(--accent-green);">4 workers</div></div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-top: 4px;">Each worker fires 10 Black Box 1 calls simultaneously, 5x more productive</div>
+      </div>
+    </div>
+    <div class="savings-callout" style="margin-top: 16px;">
+      <div class="big-number">80% fewer machines</div>
+      <div class="label">At ~$500/month per worker machine = $8,000/month saved on compute alone</div>
+    </div>
+  </div>
+
+  <!-- SAVING 3 -->
+  <div class="cost-card" style="max-width: 900px; margin: 0 auto 20px;">
+    <h3 style="color: var(--accent-green);">💰 Saving #3: Async Writes Reduce Infrastructure Needs</h3>
+    <div style="padding: 12px;">
+      <div class="bar-label" style="margin-bottom: 8px;">By not blocking on database writes, each worker completes requests faster and can handle more requests per second. This means we need fewer workers to serve the same throughput.</div>
+      <div class="cost-grid" style="max-width: 100%;">
+        <div>
+          <div class="bar-label">❌ Blocking writes — 700ms per request</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-red);">~1.4 requests/sec per worker</div></div>
+        </div>
+        <div>
+          <div class="bar-label">✅ Async writes — 600ms per request</div>
+          <div class="bar-container"><div class="bar" style="width: 86%; background: var(--accent-green);">~1.7 requests/sec per worker</div></div>
+        </div>
+      </div>
+      <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-top: 8px;">
+        ~20% throughput improvement per worker = need fewer total workers
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVING 4 -->
+  <div class="cost-card" style="max-width: 900px; margin: 0 auto 20px;">
+    <h3 style="color: var(--accent-purple);">💰 Saving #4: Queue-Based Load Leveling Prevents Over-Provisioning</h3>
+    <div style="padding: 12px;">
+      <div class="cost-grid" style="max-width: 100%;">
+        <div>
+          <div class="bar-label">❌ Without queue — must provision for peak traffic</div>
+          <div class="bar-container"><div class="bar" style="width: 100%; background: var(--accent-red);">30 workers (for 10x spike)</div></div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted); margin-top: 4px;">Most of the time, 25 workers sit idle</div>
+        </div>
+        <div>
+          <div class="bar-label">✅ With queue — provision for average, queue handles spikes</div>
+          <div class="bar-container"><div class="bar" style="width: 20%; background: var(--accent-green);">5 workers</div></div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-top: 4px;">Spikes queue up, workers process steadily. Scale up only if sustained.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Total -->
+  <div class="savings-callout" style="max-width: 900px; margin: 20px auto; border-color: var(--accent-cyan);">
+    <div style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-cyan); margin-bottom: 8px;">TOTAL ESTIMATED ANNUAL SAVINGS</div>
+    <div class="big-number" style="color: var(--accent-cyan);">$700K+/year</div>
+    <div class="label">From batching ($547K) + fewer machines ($96K) + over-provisioning reduction ($60K+)</div>
+    <div class="label" style="margin-top: 8px; color: var(--accent-green);">None of these savings depend on caching or files being repeated</div>
+  </div>
+</div>
+
+<!-- ===== REAL-TIME FLOW ===== -->
+<div class="diagram-section page-break">
+  <div class="section-title">Real-Time Request Flow (Step by Step)</div>
+  <div class="flow-grid">
+    <div class="flow-step">
+      <span class="step-num">1</span>
+      <div class="step-text"><strong>Customer sends 50 files</strong> to the /realtime endpoint — "classify these now"</div>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">2</span>
+      <div class="step-text"><strong>Gateway verifies identity and rate limit</strong> — customer is allowed, pass through</div>
+    </div>
+    <div class="flow-step">
+      <span class="step-num" style="background: var(--text-muted);">3</span>
+      <div class="step-text" style="color: var(--text-muted);"><strong>[Optional] Check embedding cache</strong> — if enabled and any files are cached, pull those embeddings. Otherwise skip this step.</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-cyan);">
+      <span class="step-num" style="background: var(--accent-cyan);">4</span>
+      <div class="step-text"><strong>Call Black Box 1</strong> — 50 files fit in a single call (under the 200 limit). If it were 500 files, we'd make 3 parallel calls of ~167 files each. This is the biggest latency saver.</div>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">5</span>
+      <div class="step-text"><strong>Collect all 50 embeddings</strong> — combine any from cache with new ones from Black Box 1</div>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">6</span>
+      <div class="step-text"><strong>Call Black Box 2 with all 50 embeddings</strong> — single call, well under the 2,000 limit. Returns 50 classification dictionaries.</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-green);">
+      <span class="step-num" style="background: var(--accent-green);">7</span>
+      <div class="step-text"><strong>Save results and embeddings in the background</strong> — start the database write but don't wait for it to finish. This saves 50-100ms.</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-cyan);">
+      <span class="step-num" style="background: var(--accent-cyan);">8</span>
+      <div class="step-text"><strong>Return response to customer</strong> — 50 classifications with labels and confidence scores. Total time: ~620ms ✅</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
