@@ -138,6 +138,7 @@
   .tag-queue { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
   .tag-money { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
   .tag-primary { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+  .tag-stateless { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px dashed var(--accent-green); }
 
   .arrow-down {
     display: flex;
@@ -504,6 +505,25 @@
 <!-- ===== FULL ARCHITECTURE ===== -->
 <div class="diagram-section page-break">
   <div class="section-title">Full System Architecture</div>
+
+  <!-- Stateless Web Tier Callout -->
+  <div style="max-width: 900px; margin: 0 auto 24px; display: flex; gap: 16px; align-items: stretch;">
+    <div style="flex: 1; background: rgba(16, 185, 129, 0.05); border: 1px dashed var(--accent-green); border-radius: 8px; padding: 14px 18px;">
+      <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-bottom: 6px;">STATELESS WEB TIER</div>
+      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+        Gateway, Real-Time Service, and Batch Service hold <strong style="color: var(--text);">no session state</strong>.
+        Any instance can handle any request. Scale horizontally by adding more instances.
+      </div>
+    </div>
+    <div style="flex: 1; background: rgba(236, 72, 153, 0.05); border: 1px solid var(--accent-pink); border-radius: 8px; padding: 14px 18px;">
+      <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-pink); margin-bottom: 6px;">STATE LIVES HERE</div>
+      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+        <strong style="color: var(--text);">Redis</strong> → API keys, rate limits, cache, queue<br>
+        <strong style="color: var(--text);">PostgreSQL</strong> → jobs, results, usage history
+      </div>
+    </div>
+  </div>
+
   <div class="arch-container">
 
     <!-- Customer -->
@@ -525,6 +545,7 @@
     <div class="arch-row">
       <div class="arch-box wide-box" style="border-color: var(--accent-cyan);">
         <span class="tag tag-api">ENTRY POINT</span>
+        <span class="tag tag-stateless">STATELESS</span>
         <div class="label" style="color: var(--accent-cyan);">Gateway (The Front Door)</div>
         <div class="desc">
           <ul>
@@ -552,6 +573,7 @@
     <div class="arch-row">
       <div class="arch-box" style="border-color: var(--accent-cyan); flex: 1; max-width: 340px;">
         <span class="tag tag-api">SPEED PRIORITY</span>
+        <span class="tag tag-stateless">STATELESS</span>
         <div class="label" style="color: var(--accent-cyan);">Real-Time Service</div>
         <div class="desc">
           <ul>
@@ -564,6 +586,7 @@
       </div>
       <div class="arch-box" style="border-color: var(--accent-purple); flex: 1; max-width: 340px;">
         <span class="tag tag-routing">COST PRIORITY</span>
+        <span class="tag tag-stateless">STATELESS</span>
         <div class="label" style="color: var(--accent-purple);">Batch Ingestion Service</div>
         <div class="desc">
           <ul>
@@ -700,9 +723,9 @@
         <div class="label" style="color: var(--accent-pink); font-size: 13px;">PostgreSQL</div>
         <div class="desc">
           <ul>
+            <li>API keys &amp; customers</li>
             <li>Classification results</li>
             <li>Job status &amp; progress</li>
-            <li>Embedding metadata</li>
             <li>Customer usage analytics</li>
           </ul>
         </div>
@@ -712,6 +735,7 @@
         <div class="label" style="color: var(--accent-pink); font-size: 13px;">Redis</div>
         <div class="desc">
           <ul>
+            <li>API key cache</li>
             <li>Embedding cache (if enabled)</li>
             <li>Rate limit counters</li>
             <li>Task queue (for batch path)</li>

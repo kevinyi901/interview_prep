@@ -1,5 +1,6 @@
 """Flask API for interview prep - People and Tasks management."""
 import csv
+from collections import defaultdict
 import requests
 from flask import Flask, jsonify, request
 
@@ -13,16 +14,8 @@ def hello_world():
     return jsonify({"hello": "world"}), 200
 
 
-data_store = {
-    "people": [],
-    "tasks": []
-}
-
-# Define required fields for each dataset
-SCHEMA = {
-    "people": {"id", "name", "skill"},
-    "tasks": {"customer", "project_id", "category", "prompt", "response"}
-}
+# Auto-creates empty list for any dataset name
+data_store = defaultdict(list)
 
 
 # ============================================================
@@ -34,26 +27,15 @@ SCHEMA = {
 # ============================================================
 @app.route("/ingest/<dataset>", methods=["POST"])
 def ingest(dataset):
-    # 1. Validate dataset
-    if dataset not in data_store:
-        return jsonify(error="Invalid dataset"), 400
-
-    # 2. Get filename (from request body or use default)
+    # Get filename (from request body or use default)
     body = request.get_json() or {}
     filename = body.get("filename", f"{dataset}.csv")
 
-    # 3. Read CSV file
+    # Read CSV file (schema is inferred from headers)
     with open(filename) as f:
         records = list(csv.DictReader(f))
 
-    # 4. Schema validation
-    required = SCHEMA[dataset]
-    for i, row in enumerate(records):
-        missing = required - row.keys()
-        if missing:
-            return jsonify(error=f"Row {i} missing fields: {list(missing)}"), 400
-
-    # 5. Save
+    # Save to data_store (auto-creates dataset if new)
     data_store[dataset] = records
     return jsonify(status="ok", count=len(records)), 200
 
@@ -69,9 +51,6 @@ def ingest(dataset):
 #
 @app.route("/fetch/<dataset>", methods=["POST"])
 def fetch(dataset):
-    if dataset not in data_store:
-        return jsonify(error="Invalid dataset"), 400
-
     body = request.get_json() or {}
     url = body.get("url")
     api_key = body.get("api_key")
@@ -79,20 +58,14 @@ def fetch(dataset):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.get(url, headers=headers)
 
-     # If CSV response:
-    lines = response.text.splitlines()
-    records = list(csv.DictReader(lines))
+    # Parse as JSON or CSV based on Content-Type
+    if 'json' in response.headers.get('Content-Type', ''):
+        records = response.json()
+    else:
+        lines = response.text.splitlines()
+        records = list(csv.DictReader(lines))
 
-    # If JSON response:
-    records = response.json()
-
-    # Schema validation
-    required = SCHEMA[dataset]
-    for i, row in enumerate(records):
-        missing = required - row.keys()
-        if missing:
-            return jsonify(error=f"Row {i} missing fields: {list(missing)}"), 400
-
+    # Save to data_store (auto-creates dataset if new)
     data_store[dataset] = records
     return jsonify(status="ok", count=len(records)), 200
 
@@ -142,26 +115,25 @@ def filter_tasks():
 # ============================================================
 @app.route('/people/groups', methods=['GET'])
 def group_people():
-    groups = {}
+    groups = defaultdict(list)
     for person in data_store["people"]:
-        skill = person["skill"]
-        if skill not in groups:
-            groups[skill] = []
-        groups[skill].append(person)
+        groups[person["skill"]].append(person)
     return jsonify(groups), 200
 
 
 @app.route('/match', methods=['GET'])
 def match_people_to_tasks():
+    # Pre-group people by skill
+    people_by_skill = defaultdict(list)
+    for person in data_store["people"]:
+        people_by_skill[person["skill"]].append(person)
+
+    # Match tasks to people
     matches = []
     for task in data_store["tasks"]:
-        matched_people = [
-            p for p in data_store["people"]
-            if p["skill"] == task["category"]
-        ]
         matches.append({
             "task": task,
-            "people": matched_people
+            "people": people_by_skill[task["category"]]
         })
     return jsonify(matches), 200
 

@@ -155,9 +155,37 @@ GET /v1/jobs/job-456
 
 > "**One — Identity verification.** The customer includes a secret key with every request. The gateway checks that this key is valid and identifies which customer it belongs to. This lets us track usage per customer and bill accordingly."
 
+> "For the key lookup: API keys are stored in **PostgreSQL** as the source of truth — that's where we create keys, associate them with customers, and track permissions. But checking the database on every single request would be slow. So we cache valid keys in **Redis**. The flow is: check Redis first (sub-millisecond), if it's a miss, check PostgreSQL and cache the result. Keys rarely change, so the cache hit rate is nearly 100%."
+
 > "**Two — Rate limiting.** Each customer has a cap on how many requests they can send per minute. If they exceed it, the gateway returns an error that says 'you've exceeded your limit, try again in 30 seconds.' This is critical because it prevents any single customer from using up all the system's capacity and degrading service for everyone else."
 
 > "**Three — Routing.** Based on which address the customer called — /realtime or /batch — the gateway sends the request to the appropriate service. This is simple path-based routing: different addresses go to different services."
+
+---
+
+### Layer 2: Stateless Web Tier
+
+> "Before I dive into the two processing paths, let me highlight an important architectural decision: **both services are stateless**."
+
+> "Stateless means the server itself holds no session data, no user context, no in-memory state between requests. Every request arrives with everything needed to process it — the API key, the files, the options."
+
+**Where does the state actually live?**
+
+> "State lives in dedicated external stores:"
+>
+> "**Redis** — for fast, temporary state. Rate limit counters ('customer X has made 47 requests this minute'), session tokens if we need authentication, the embedding cache, and the task queue for batch processing. Redis keeps everything in memory, so lookups take under 1 millisecond."
+>
+> "**PostgreSQL** — for permanent records. Job status, classification results, customer usage history, billing data. This survives restarts and crashes."
+
+**Why stateless matters:**
+
+> "**Horizontal scaling.** I can run 10 identical copies of the Real-Time Service behind a load balancer. Any instance can handle any request. To handle more traffic, I just add more instances."
+>
+> "**Crash recovery.** If one instance dies mid-request, the client retries and another instance handles it. No session state is lost because there was no session state to begin with."
+>
+> "**Simpler deployments.** I can roll out new code by starting new instances and stopping old ones. No need to drain sessions or migrate state."
+
+> "This is a fundamental pattern for scalable systems — compute is stateless and disposable, state lives in specialized stores."
 
 ---
 
@@ -359,6 +387,8 @@ return results
 #### Redis — Fast Temporary Storage
 
 > "Redis keeps data in the computer's working memory, which makes it extremely fast — under 1 millisecond per lookup. We use it for:"
+
+> "**API key cache** — valid keys cached from PostgreSQL so we don't hit the database on every request."
 
 > "**Rate limit counters** — tracking how many requests each customer has made in the current time window."
 
