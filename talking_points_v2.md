@@ -19,11 +19,19 @@
 
 > "For the sub-1-second latency requirement — is that end-to-end including both embedding generation and classification? Or just one of those steps?"
 
+**Why this matters:** If end-to-end, both BB1 + BB2 must fit in <1s — parallelism is essential, caching becomes very valuable, and we may need to cap files per request at ~50. If single-step only, we have more room and can handle larger batches.
+
 > "For 1,000 assets per second — is that sustained throughput or a peak burst?"
+
+**Why this matters:** If sustained, we need always-on provisioned capacity (fixed worker pool, pre-warmed pods). If burst, we lean on queue buffering + auto-scaling and can run a smaller baseline fleet to save cost.
 
 > "How often do models get updated? That affects how I think about storing and organizing the embeddings."
 
+**Why this matters:** If models rarely change, aggressive embedding caching pays off (high hit rate, simple invalidation). If models update frequently, we need version-aware storage (key embeddings by model version) and a cache invalidation strategy on every deploy.
+
 > "For the stored embeddings and results — do you need real-time query access for debugging, or is it okay if retrieval takes a few seconds?"
+
+**Why this matters:** If real-time access needed, we write synchronously to PostgreSQL (or add read replicas) before returning. If delayed is fine, we can write asynchronously — fire-and-forget to a queue that flushes to S3/PostgreSQL in bulk, keeping the hot path fast.
 
 ---
 
