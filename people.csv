@@ -1,6 +1,6 @@
 id,name,skill,experience
-1,Alice,backend,5
-2,Bob,frontend,3
-3,Charlie,data,4
-4,Diana,backend,2
-5,Eve,frontend,6
+1,Alice,math,5
+2,Bob,writing,3
+3,Charlie,math,4
+4,Diana,coding,2
+5,Eve,coding,6

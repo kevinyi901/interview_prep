@@ -518,7 +518,7 @@
     <div style="flex: 1; background: rgba(236, 72, 153, 0.05); border: 1px solid var(--accent-pink); border-radius: 8px; padding: 14px 18px;">
       <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-pink); margin-bottom: 6px;">STATE LIVES HERE</div>
       <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-        <strong style="color: var(--text);">Redis</strong> → API keys, rate limits, cache, queue<br>
+        <strong style="color: var(--text);">Redis</strong> → rate limits, idempotency keys, embedding cache, task queue (Streams)<br>
         <strong style="color: var(--text);">PostgreSQL</strong> → jobs, results, usage history
       </div>
     </div>
@@ -541,178 +541,196 @@
 
     <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
 
-    <!-- Gateway -->
-    <div class="arch-row">
-      <div class="arch-box wide-box" style="border-color: var(--accent-cyan);">
-        <span class="tag tag-api">ENTRY POINT</span>
-        <span class="tag tag-stateless">STATELESS</span>
-        <div class="label" style="color: var(--accent-cyan);">Gateway (The Front Door)</div>
-        <div class="desc">
-          <ul>
-            <li><strong>Identity Check:</strong> Verifies the customer's key</li>
-            <li><strong>Rate Limiting:</strong> Prevents any single customer from overwhelming the system</li>
-            <li><strong>Routing:</strong> Sends to real-time or batch path based on which address the customer called</li>
-          </ul>
-        </div>
-      </div>
-    </div>
+    <!-- ========== API SERVER BOUNDARY ========== -->
+    <div style="border: 2px solid var(--accent-cyan); border-radius: 16px; padding: 24px 20px; position: relative; margin-bottom: 8px;">
+      <div style="position: absolute; top: -12px; left: 24px; background: var(--bg); padding: 0 12px; font-family: 'JetBrains Mono'; font-size: 13px; font-weight: 700; color: var(--accent-cyan); letter-spacing: 1px;">API SERVER (STATELESS)</div>
 
-    <!-- Split -->
-    <div style="display: flex; justify-content: center; gap: 280px; padding: 16px 0;">
-      <div style="text-align: center;">
-        <svg width="24" height="40" viewBox="0 0 24 40"><path d="M12 0 L12 36 M6 30 L12 36 L18 30" stroke="var(--accent-cyan)" stroke-width="2" fill="none"/></svg>
-        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-cyan);">Real-Time Path</div>
+      <!-- Gateway -->
+      <div class="arch-row">
+        <div class="arch-box wide-box" style="border-color: var(--accent-cyan);">
+          <span class="tag tag-api">ENTRY POINT</span>
+          <span class="tag tag-stateless">STATELESS</span>
+          <div class="label" style="color: var(--accent-cyan);">Gateway (The Front Door)</div>
+          <div class="desc">
+            <ul>
+              <li><strong>JWT Authentication:</strong> Validates the customer's JWT access token — verifies signature, checks expiration, extracts customer_id and scopes. No database lookup needed for every request.</li>
+              <li><strong>Rate Limiting:</strong> Checks Redis counter for this customer_id. Prevents any single customer from overwhelming the system.</li>
+              <li><strong>Routing:</strong> Sends to real-time or batch path based on which address the customer called</li>
+            </ul>
+          </div>
+        </div>
       </div>
-      <div style="text-align: center;">
-        <svg width="24" height="40" viewBox="0 0 24 40"><path d="M12 0 L12 36 M6 30 L12 36 L18 30" stroke="var(--accent-purple)" stroke-width="2" fill="none"/></svg>
-        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-purple);">Batch Path</div>
-      </div>
-    </div>
 
-    <!-- Two Paths -->
-    <div class="arch-row">
-      <div class="arch-box" style="border-color: var(--accent-cyan); flex: 1; max-width: 340px;">
-        <span class="tag tag-api">SPEED PRIORITY</span>
-        <span class="tag tag-stateless">STATELESS</span>
-        <div class="label" style="color: var(--accent-cyan);">Real-Time Service</div>
-        <div class="desc">
-          <ul>
-            <li>Small requests (1–50 files)</li>
-            <li>Processes immediately</li>
-            <li>Goal: under 1 second</li>
-            <li>Does NOT wait to fill batches</li>
-          </ul>
+      <!-- Split -->
+      <div style="display: flex; justify-content: center; gap: 280px; padding: 16px 0;">
+        <div style="text-align: center;">
+          <svg width="24" height="40" viewBox="0 0 24 40"><path d="M12 0 L12 36 M6 30 L12 36 L18 30" stroke="var(--accent-cyan)" stroke-width="2" fill="none"/></svg>
+          <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-cyan);">Real-Time Path</div>
+        </div>
+        <div style="text-align: center;">
+          <svg width="24" height="40" viewBox="0 0 24 40"><path d="M12 0 L12 36 M6 30 L12 36 L18 30" stroke="var(--accent-purple)" stroke-width="2" fill="none"/></svg>
+          <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-purple);">Batch Path</div>
         </div>
       </div>
-      <div class="arch-box" style="border-color: var(--accent-purple); flex: 1; max-width: 340px;">
-        <span class="tag tag-routing">COST PRIORITY</span>
-        <span class="tag tag-stateless">STATELESS</span>
-        <div class="label" style="color: var(--accent-purple);">Batch Ingestion Service</div>
-        <div class="desc">
-          <ul>
-            <li>Large requests (100s–10,000s of files)</li>
-            <li>Returns a job identifier immediately</li>
-            <li>Saves job record to database</li>
-            <li>Chunks files into groups of 200, places in queue</li>
-          </ul>
+
+      <!-- Two Paths -->
+      <div class="arch-row">
+        <div class="arch-box" style="border-color: var(--accent-cyan); flex: 1; max-width: 340px;">
+          <span class="tag tag-api">SPEED PRIORITY</span>
+          <span class="tag tag-stateless">STATELESS</span>
+          <div class="label" style="color: var(--accent-cyan);">Real-Time Service</div>
+          <div class="desc">
+            <ul>
+              <li>Small requests (1–50 files)</li>
+              <li>Processes immediately</li>
+              <li>Goal: under 1 second</li>
+              <li>Does NOT wait to fill batches</li>
+              <li>Calls orchestration layer directly (inline)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="arch-box" style="border-color: var(--accent-purple); flex: 1; max-width: 340px;">
+          <span class="tag tag-routing">COST PRIORITY</span>
+          <span class="tag tag-stateless">STATELESS</span>
+          <div class="label" style="color: var(--accent-purple);">Batch Ingestion Service</div>
+          <div class="desc">
+            <ul>
+              <li>Large requests (100s–10,000s of files)</li>
+              <li>Returns a job identifier immediately</li>
+              <li>Saves job record to database</li>
+              <li>Chunks files into groups of 200, writes to Redis Stream via XADD</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
+    <!-- ========== END API SERVER BOUNDARY ========== -->
 
     <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
 
-    <!-- Queue -->
+    <!-- Queue (sits between server and workers) -->
     <div class="arch-row">
       <div class="arch-box" style="border-color: transparent; flex: 1; max-width: 340px; background: transparent; border: none; padding: 20px;">
         <div style="text-align: center; color: var(--text-muted); font-size: 13px; font-style: italic;">
-          (Skips queue — goes directly<br>to orchestrator)
+          (Real-time path calls<br>orchestration inline on server)
         </div>
       </div>
       <div class="arch-box" style="border-color: var(--accent-red); flex: 1; max-width: 340px;">
-        <span class="tag tag-queue">BUFFER</span>
-        <div class="label" style="color: var(--accent-red);">Task Queue</div>
+        <span class="tag tag-queue">REDIS STREAMS</span>
+        <div class="label" style="color: var(--accent-red);">Task Queue (Redis Streams + Consumer Groups)</div>
         <div class="desc">
           <ul>
-            <li>Holds chunks of 200 files waiting to be processed</li>
-            <li>Workers pull tasks at their own pace</li>
-            <li>Absorbs traffic spikes</li>
-            <li>If a worker crashes, task returns to queue automatically</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
-
-    <!-- Orchestration — THE CORE -->
-    <div class="arch-row">
-      <div class="arch-box wide-box" style="border-color: var(--accent-green); background: rgba(16, 185, 129, 0.03);">
-        <span class="tag tag-primary">CORE ENGINE — WHERE THE OPTIMIZATIONS LIVE</span>
-        <div class="label" style="color: var(--accent-green);">Orchestration Layer</div>
-        <div class="desc" style="margin-bottom: 16px;">
-          Both paths converge here. This layer coordinates calls to both black box services using the optimizations that save time and money.
-        </div>
-        <div class="dual-column">
-          <div style="background: var(--surface-2); border-radius: 8px; padding: 14px;">
-            <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">Step A: Embedding Phase (Fan-Out)</div>
-            <div class="desc">
-              <ol>
-                <li><strong style="color: var(--accent-green);">[Optional]</strong> Check embedding cache</li>
-                <li>Split files into chunks of 200 (Black Box 1's limit)</li>
-                <li><strong style="color: var(--accent-cyan);">Run ALL chunks in parallel</strong> — this is the #1 optimization</li>
-                <li>Collect all embeddings as they return</li>
-              </ol>
-            </div>
-          </div>
-          <div style="background: var(--surface-2); border-radius: 8px; padding: 14px;">
-            <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-bottom: 6px;">Step B: Classification Phase (Fan-In)</div>
-            <div class="desc">
-              <ol>
-                <li>Accumulate all embeddings (up to 2,000)</li>
-                <li>Send one large request to Black Box 2</li>
-                <li>Get labels + confidence scores back</li>
-                <li><strong style="color: var(--accent-green);">Save results in background</strong> — don't block response</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-        <div class="cyan-note">
-          🔑 The three guaranteed optimizations: (1) Parallel Black Box 1 calls, (2) Full batches of 200, (3) Background storage writes. These save money regardless of whether content is unique or repeated.
-        </div>
-      </div>
-    </div>
-
-    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
-
-    <!-- Optional Cache -->
-    <div class="arch-row">
-      <div class="arch-box wide-box" style="border-color: var(--text-muted); border-style: dashed; background: rgba(255,255,255,0.01);">
-        <span class="tag" style="background: rgba(255,255,255,0.05); color: var(--text-muted);">CONDITIONAL — DEPENDS ON USE CASE</span>
-        <div class="label" style="color: var(--text-muted);">Embedding Cache (Redis)</div>
-        <div class="desc">
-          <strong>High value:</strong> Content moderation (same spam/viral content flagged thousands of times)<br>
-          <strong>Low value:</strong> Unique content classification (each file is different, cache rarely hit)<br><br>
-          <strong>Strategy:</strong> Build the cache layer, instrument the hit rate, scale up if hit rate exceeds 10%, scale down if it doesn't.
-        </div>
-      </div>
-    </div>
-
-    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
-
-    <!-- Black Boxes -->
-    <div class="arch-row">
-      <div class="arch-box" style="border-color: var(--accent-amber); flex: 1; max-width: 340px; background: rgba(245, 158, 11, 0.03);">
-        <span class="tag tag-blackbox">BLACK BOX 1 — THE BOTTLENECK</span>
-        <div class="label" style="color: var(--accent-amber);">Embedding Generation</div>
-        <div class="desc">
-          <ul>
-            <li><strong>Input:</strong> Files</li>
-            <li><strong>Output:</strong> Embedding vectors</li>
-            <li><strong>Limit:</strong> 200 files per call</li>
-            <li><strong>Speed:</strong> ~400ms per call</li>
+            <li>Batch service writes chunks of 200 files via XADD</li>
+            <li>Consumer group distributes tasks across workers via XREADGROUP</li>
+            <li>Each worker ACKs after successful processing (XACK)</li>
+            <li>Unacknowledged tasks stay in the Pending Entries List (PEL)</li>
+            <li>Supervisor reclaims stale tasks via XCLAIM after timeout</li>
+            <li>Failed tasks retried up to N times, then moved to Dead Letter Queue (DLQ)</li>
           </ul>
         </div>
         <div class="highlight-note">
-          For 2,000 files → 10 calls needed.<br>
-          Sequential: 4,000ms. Parallel: 400ms.
-        </div>
-      </div>
-      <div class="arch-box" style="border-color: var(--accent-amber); flex: 1; max-width: 340px; background: rgba(245, 158, 11, 0.03);">
-        <span class="tag tag-blackbox">BLACK BOX 2</span>
-        <div class="label" style="color: var(--accent-amber);">Classification</div>
-        <div class="desc">
-          <ul>
-            <li><strong>Input:</strong> Embeddings</li>
-            <li><strong>Output:</strong> {label: confidence} dictionaries</li>
-            <li><strong>Limit:</strong> 2,000 embeddings per call</li>
-            <li><strong>Speed:</strong> ~200ms per call</li>
-          </ul>
-        </div>
-        <div class="green-note">
-          For 2,000 files → only 1 call needed. Already efficient.
+          Why Redis Streams over SQS/RabbitMQ? Already using Redis for cache + rate limits. Streams give us persistent, ordered, consumer-group-aware queuing without adding another service.
         </div>
       </div>
     </div>
+
+    <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+    <!-- ========== WORKER NODES BOUNDARY ========== -->
+    <div style="border: 2px solid var(--accent-amber); border-radius: 16px; padding: 24px 20px; position: relative;">
+      <div style="position: absolute; top: -12px; left: 24px; background: var(--bg); padding: 0 12px; font-family: 'JetBrains Mono'; font-size: 13px; font-weight: 700; color: var(--accent-amber); letter-spacing: 1px;">WORKER NODES (SCALE HORIZONTALLY)</div>
+
+      <!-- Orchestration — THE CORE -->
+      <div class="arch-row">
+        <div class="arch-box wide-box" style="border-color: var(--accent-green); background: rgba(16, 185, 129, 0.03);">
+          <span class="tag tag-primary">CORE ENGINE — WHERE THE OPTIMIZATIONS LIVE</span>
+          <div class="label" style="color: var(--accent-green);">Orchestration Layer</div>
+          <div class="desc" style="margin-bottom: 16px;">
+            Both paths converge here. Batch workers pull from Redis Streams; real-time service calls this as a shared library. This layer coordinates calls to both black box services using the optimizations that save time and money.
+          </div>
+          <div class="dual-column">
+            <div style="background: var(--surface-2); border-radius: 8px; padding: 14px;">
+              <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">Step A: Embedding Phase (Fan-Out)</div>
+              <div class="desc">
+                <ol>
+                  <li><strong style="color: var(--accent-green);">[Optional]</strong> Check embedding cache</li>
+                  <li>Split files into chunks of 200 (Black Box 1's limit)</li>
+                  <li><strong style="color: var(--accent-cyan);">Run ALL chunks in parallel</strong> — this is the #1 optimization</li>
+                  <li>Collect all embeddings as they return</li>
+                </ol>
+              </div>
+            </div>
+            <div style="background: var(--surface-2); border-radius: 8px; padding: 14px;">
+              <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green); margin-bottom: 6px;">Step B: Classification Phase (Fan-In)</div>
+              <div class="desc">
+                <ol>
+                  <li>Accumulate all embeddings (up to 2,000)</li>
+                  <li>Send one large request to Black Box 2</li>
+                  <li>Get labels + confidence scores back</li>
+                  <li><strong style="color: var(--accent-green);">Save results in background</strong> — don't block response</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+          <div class="cyan-note">
+            🔑 The three guaranteed optimizations: (1) Parallel Black Box 1 calls, (2) Full batches of 200, (3) Background storage writes. These save money regardless of whether content is unique or repeated.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+      <!-- Optional Cache -->
+      <div class="arch-row">
+        <div class="arch-box wide-box" style="border-color: var(--text-muted); border-style: dashed; background: rgba(255,255,255,0.01);">
+          <span class="tag" style="background: rgba(255,255,255,0.05); color: var(--text-muted);">CONDITIONAL — DEPENDS ON USE CASE</span>
+          <div class="label" style="color: var(--text-muted);">Embedding Cache (Redis)</div>
+          <div class="desc">
+            <strong>High value:</strong> Content moderation (same spam/viral content flagged thousands of times)<br>
+            <strong>Low value:</strong> Unique content classification (each file is different, cache rarely hit)<br><br>
+            <strong>Strategy:</strong> Build the cache layer, instrument the hit rate, scale up if hit rate exceeds 10%, scale down if it doesn't.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+      <!-- Black Boxes -->
+      <div class="arch-row">
+        <div class="arch-box" style="border-color: var(--accent-amber); flex: 1; max-width: 340px; background: rgba(245, 158, 11, 0.03);">
+          <span class="tag tag-blackbox">BLACK BOX 1 — THE BOTTLENECK</span>
+          <div class="label" style="color: var(--accent-amber);">Embedding Generation</div>
+          <div class="desc">
+            <ul>
+              <li><strong>Input:</strong> Files</li>
+              <li><strong>Output:</strong> Embedding vectors</li>
+              <li><strong>Limit:</strong> 200 files per call</li>
+              <li><strong>Speed:</strong> ~400ms per call</li>
+            </ul>
+          </div>
+          <div class="highlight-note">
+            For 2,000 files → 10 calls needed.<br>
+            Sequential: 4,000ms. Parallel: 400ms.
+          </div>
+        </div>
+        <div class="arch-box" style="border-color: var(--accent-amber); flex: 1; max-width: 340px; background: rgba(245, 158, 11, 0.03);">
+          <span class="tag tag-blackbox">BLACK BOX 2</span>
+          <div class="label" style="color: var(--accent-amber);">Classification</div>
+          <div class="desc">
+            <ul>
+              <li><strong>Input:</strong> Embeddings</li>
+              <li><strong>Output:</strong> {label: confidence} dictionaries</li>
+              <li><strong>Limit:</strong> 2,000 embeddings per call</li>
+              <li><strong>Speed:</strong> ~200ms per call</li>
+            </ul>
+          </div>
+          <div class="green-note">
+            For 2,000 files → only 1 call needed. Already efficient.
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ========== END WORKER NODES BOUNDARY ========== -->
 
     <div class="arrow-down"><svg viewBox="0 0 24 32"><path d="M12 0 L12 28 M6 22 L12 28 L18 22" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
 
@@ -723,7 +741,7 @@
         <div class="label" style="color: var(--accent-pink); font-size: 13px;">PostgreSQL</div>
         <div class="desc">
           <ul>
-            <li>API keys &amp; customers</li>
+            <li>Customer accounts &amp; JWT signing keys</li>
             <li>Classification results</li>
             <li>Job status &amp; progress</li>
             <li>Customer usage analytics</li>
@@ -735,10 +753,11 @@
         <div class="label" style="color: var(--accent-pink); font-size: 13px;">Redis</div>
         <div class="desc">
           <ul>
-            <li>API key cache</li>
-            <li>Embedding cache (if enabled)</li>
-            <li>Rate limit counters</li>
-            <li>Task queue (for batch path)</li>
+            <li>Rate limit counters (per customer_id from JWT)</li>
+            <li>Idempotency keys (prevent duplicate processing of same request)</li>
+            <li>Embedding cache (if enabled, conditional)</li>
+            <li>Task queue via Redis Streams + consumer groups</li>
+            <li>Pending Entries List (PEL) for crash recovery</li>
           </ul>
         </div>
       </div>
@@ -829,6 +848,173 @@
   <div class="savings-callout">
     <div class="big-number">73% Faster</div>
     <div class="label">2,200ms → 600ms for 1,000 files — just by running calls at the same time</div>
+  </div>
+</div>
+
+<!-- ===== BATCH WORKER RELIABILITY ===== -->
+<div class="diagram-section page-break">
+  <div class="section-title">Batch Worker Reliability — Redis Streams in Detail</div>
+
+  <p style="color: var(--text-muted); margin-bottom: 32px; font-size: 14px; max-width: 800px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+    Redis Streams with consumer groups give us built-in reliability primitives. Here's the lifecycle of a batch task and what happens when things go wrong:
+  </p>
+
+  <div class="flow-grid">
+    <div class="flow-step">
+      <span class="step-num">1</span>
+      <div class="step-text"><strong>Batch service writes task via XADD</strong> — adds a message to the stream containing a chunk of 200 file references. Each message gets a unique, time-ordered ID.</div>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">2</span>
+      <div class="step-text"><strong>Worker reads via XREADGROUP</strong> — the consumer group ensures each message is delivered to exactly one worker. The message moves to that worker's Pending Entries List (PEL).</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-green);">
+      <span class="step-num" style="background: var(--accent-green);">3a</span>
+      <div class="step-text"><strong>Happy path: Worker ACKs after success</strong> — worker processes the chunk, writes results to PostgreSQL, then calls XACK. The message is removed from the PEL. Done.</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-red);">
+      <span class="step-num" style="background: var(--accent-red);">3b</span>
+      <div class="step-text"><strong>Worker crashes mid-processing</strong> — the message stays in the PEL because it was never ACKed. A supervisor process periodically runs XPENDING to find messages that have been idle too long (e.g., >5 minutes).</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-amber);">
+      <span class="step-num" style="background: var(--accent-amber);">4</span>
+      <div class="step-text"><strong>Supervisor reclaims via XCLAIM</strong> — reassigns the stale message to a healthy worker. Increments a retry counter on the message. The new worker processes it as normal.</div>
+    </div>
+    <div class="flow-step" style="border-color: var(--accent-purple);">
+      <span class="step-num" style="background: var(--accent-purple);">5</span>
+      <div class="step-text"><strong>Dead Letter Queue (DLQ)</strong> — if a message has been retried N times (e.g., 3) and still fails, it's moved to a separate DLQ stream. This prevents poison messages from blocking the queue. Engineers investigate DLQ entries manually or via alerting.</div>
+    </div>
+  </div>
+
+  <div style="max-width: 900px; margin: 24px auto 0; display: flex; gap: 16px;">
+    <div style="flex: 1; background: rgba(6, 182, 212, 0.05); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 8px; padding: 14px 18px;">
+      <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">IDEMPOTENCY</div>
+      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+        Retries are safe because each task has a unique ID stored in Redis. Before processing, the worker checks: "have I already written results for this task ID?" If yes, ACK and skip. This prevents duplicate work even if a task is delivered twice.
+      </div>
+    </div>
+    <div style="flex: 1; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 14px 18px;">
+      <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-amber); margin-bottom: 6px;">WHY NOT SQS / RABBITMQ?</div>
+      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+        We already depend on Redis for rate limiting, idempotency keys, and optional embedding cache. Redis Streams give us persistent, consumer-group-aware queuing without adding another infrastructure dependency. One fewer service to operate and monitor.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== JWT AUTHENTICATION DEEP DIVE ===== -->
+<div class="diagram-section page-break">
+  <div class="section-title">JWT Authentication — How Customers Prove Identity</div>
+
+  <p style="color: var(--text-muted); margin-bottom: 32px; font-size: 14px; max-width: 800px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+    JWT (JSON Web Token) lets the gateway verify every request <strong style="color: var(--text);">without hitting the database</strong>. Here's how tokens are issued, used, and refreshed — and why short-lived tokens don't conflict with long-running batch jobs.
+  </p>
+
+  <!-- Token Issuance Methods -->
+  <div style="max-width: 900px; margin: 0 auto 24px;">
+    <div style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-cyan); margin-bottom: 16px;">Token Issuance Methods</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+      <div style="background: var(--surface); border: 1px solid var(--accent-cyan); border-radius: 10px; padding: 16px;">
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-cyan); margin-bottom: 8px;">CLIENT CREDENTIALS</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          Machine-to-machine. Customer sends <strong style="color: var(--text);">client_id + client_secret</strong> → gets back a JWT.<br><br>
+          <strong style="color: var(--accent-green);">Best for: API integrations</strong><br>
+          This is what Scale AI customers use. No human involved.
+        </div>
+      </div>
+      <div style="background: var(--surface); border: 1px solid var(--accent-purple); border-radius: 10px; padding: 16px;">
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-purple); margin-bottom: 8px;">AUTHORIZATION CODE (OAuth 2.0)</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          User logs in via browser redirect → gets auth code → exchanges for JWT.<br><br>
+          <strong style="color: var(--accent-purple);">Best for: Apps acting on behalf of a user</strong><br>
+          e.g. "Login with Google"
+        </div>
+      </div>
+      <div style="background: var(--surface); border: 1px solid var(--text-muted); border-radius: 10px; padding: 16px;">
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">USERNAME / PASSWORD</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          Client sends credentials directly → gets JWT. Simple but less secure.<br><br>
+          <strong style="color: var(--text-muted);">Best for: First-party apps only</strong><br>
+          Not recommended for third-party APIs.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JWT vs API Key Tradeoffs -->
+  <div style="max-width: 900px; margin: 0 auto 24px;">
+    <div style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-amber); margin-bottom: 16px;">JWT vs API Key — Trade-offs</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div style="background: var(--surface); border: 1px solid var(--accent-cyan); border-radius: 10px; padding: 16px;">
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-cyan); margin-bottom: 8px;">JWT (OUR CHOICE)</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.8;">
+          <strong style="color: var(--accent-green);">&#10003;</strong> No DB lookup per request — verify signature locally<br>
+          <strong style="color: var(--accent-green);">&#10003;</strong> Carries claims (customer_id, scopes, expiry) inside the token<br>
+          <strong style="color: var(--accent-green);">&#10003;</strong> Scales well — every service can verify independently<br>
+          <strong style="color: var(--accent-green);">&#10003;</strong> Limited damage on leak (short TTL, e.g. 15 min)<br>
+          <strong style="color: var(--accent-red);">&#10007;</strong> Hard to revoke — valid until expiry (need blocklist or short TTL)<br>
+          <strong style="color: var(--accent-red);">&#10007;</strong> More complex — signing keys, refresh flow, expiry handling
+        </div>
+      </div>
+      <div style="background: var(--surface); border: 1px solid var(--text-muted); border-radius: 10px; padding: 16px;">
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">API KEY</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.8;">
+          <strong style="color: var(--accent-green);">&#10003;</strong> Simple — generate random string, store in DB<br>
+          <strong style="color: var(--accent-green);">&#10003;</strong> Easy revocation — delete from DB, instant<br>
+          <strong style="color: var(--accent-green);">&#10003;</strong> Good for long-lived external developer integrations<br>
+          <br>
+          <strong style="color: var(--accent-red);">&#10007;</strong> Requires DB/cache lookup on every request<br>
+          <strong style="color: var(--accent-red);">&#10007;</strong> Opaque — no embedded claims, need DB to look up owner<br>
+          <strong style="color: var(--accent-red);">&#10007;</strong> Dangerous on leak — valid forever until manually rotated
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refresh Token Flow -->
+  <div style="max-width: 900px; margin: 0 auto 24px;">
+    <div style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-green); margin-bottom: 16px;">Short TTL + Refresh Token Flow</div>
+    <div class="flow-grid">
+      <div class="flow-step" style="border-color: var(--accent-cyan);">
+        <span class="step-num" style="background: var(--accent-cyan);">1</span>
+        <div class="step-text"><strong>Customer authenticates</strong> — sends client_id + client_secret to <code style="color: var(--accent-cyan);">POST /auth/token</code>. Server issues two tokens: an <strong>access token</strong> (JWT, 15 min TTL) and a <strong>refresh token</strong> (opaque string, 7 day TTL, stored in PostgreSQL).</div>
+      </div>
+      <div class="flow-step">
+        <span class="step-num">2</span>
+        <div class="step-text"><strong>Customer makes API calls</strong> — includes access token in every request header. Gateway verifies the JWT signature and checks expiration. No database hit needed.</div>
+      </div>
+      <div class="flow-step" style="border-color: var(--accent-amber);">
+        <span class="step-num" style="background: var(--accent-amber);">3</span>
+        <div class="step-text"><strong>Access token expires (after 15 min)</strong> — customer sends the refresh token to <code style="color: var(--accent-cyan);">POST /auth/refresh</code>. Server checks refresh token against PostgreSQL → issues a new access token (another 15 min).</div>
+      </div>
+      <div class="flow-step" style="border-color: var(--accent-red);">
+        <span class="step-num" style="background: var(--accent-red);">4</span>
+        <div class="step-text"><strong>Need to revoke a customer?</strong> — Delete their refresh token from PostgreSQL. Their current access token works for at most 15 more minutes, then they can't refresh. Worst case: 15 min window.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Jobs + Short TTL -->
+  <div style="max-width: 900px; margin: 0 auto 0;">
+    <div style="font-family: 'JetBrains Mono'; font-size: 14px; color: var(--accent-purple); margin-bottom: 16px;">Why Short TTL Works with Long Batch Jobs</div>
+    <div style="background: var(--surface); border: 1px solid var(--accent-purple); border-radius: 10px; padding: 20px;">
+      <div style="font-size: 13px; color: var(--text-muted); line-height: 1.8; margin-bottom: 16px;">
+        <strong style="color: var(--text);">Key insight:</strong> The JWT authenticates the <strong style="color: var(--accent-cyan);">HTTP request</strong>, not the <strong style="color: var(--accent-amber);">background job</strong>. Once the gateway accepts the request, the job runs internally with no token needed.
+      </div>
+      <div style="display: grid; grid-template-columns: 80px 1fr; gap: 8px; font-size: 12px; font-family: 'JetBrains Mono';">
+        <div style="color: var(--accent-cyan);">0:00</div>
+        <div style="color: var(--text-muted);">Customer sends POST /batch with JWT → Gateway validates ← <strong style="color: var(--accent-green);">only auth check</strong></div>
+        <div style="color: var(--accent-cyan);">0:01</div>
+        <div style="color: var(--text-muted);">Batch Service creates job record, writes chunks to Redis Stream, returns job_id ← <strong style="color: var(--accent-green);">HTTP request done</strong></div>
+        <div style="color: var(--accent-amber);">0:01–30:00</div>
+        <div style="color: var(--text-muted);">Workers process chunks internally — no token needed (authenticate at boundary, trust internally)</div>
+        <div style="color: var(--accent-cyan);">30:00</div>
+        <div style="color: var(--text-muted);">Customer calls GET /jobs/{id}/status with a <strong style="color: var(--accent-green);">new JWT</strong> ← fresh token, no expiry issue</div>
+      </div>
+      <div class="green-note" style="margin-top: 16px;">
+        Each HTTP request takes &lt;1 second. The 15-min TTL is plenty. If the token expires between polls, the customer simply gets a new one via refresh token or client credentials.
+      </div>
+    </div>
   </div>
 </div>
 

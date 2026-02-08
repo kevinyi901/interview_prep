@@ -153,13 +153,19 @@ GET /v1/jobs/job-456
 
 > "Every request first hits the gateway. This is the front door and security desk for the entire system. It does three things:"
 
-> "**One — Identity verification.** The customer includes a secret key with every request. The gateway checks that this key is valid and identifies which customer it belongs to. This lets us track usage per customer and bill accordingly."
+> "**One — JWT Authentication.** JWT stands for JSON Web Token. The customer includes a JWT access token in every request header. The gateway verifies the token's cryptographic signature, checks that it hasn't expired, and extracts the customer_id and scopes — all without hitting the database."
 
-> "For the key lookup: API keys and other user session data are stored in **PostgreSQL** as the source of truth — that's where we create keys, associate them with customers, and track permissions. But checking the database on every single request would be slow. So we cache valid keys in **Redis**. The flow is: check Redis first (sub-millisecond), if it's a miss, check PostgreSQL and cache the result. Keys rarely change, so the cache hit rate is nearly 100%."
+> "Why JWT instead of API keys? API keys require a database or cache lookup on every single request to verify ownership. With JWT, the token itself carries the claims — customer_id, permissions, expiry — signed by our server's secret key. The gateway just checks the signature mathematically. This is faster, stateless, and scales better because every service instance can verify independently."
 
-> "**Two — Rate limiting.** Each customer has a cap on how many requests they can send per minute. If they exceed it, the gateway returns an error that says 'you've exceeded your limit, try again in 30 seconds.' This is critical because it prevents any single customer from using up all the system's capacity and degrading service for everyone else."
+> "The trade-off is revocation. With API keys you can delete the key from the database and it's instantly invalid. With JWT, the token is valid until it expires. We handle this with **short TTLs** — access tokens expire after 15 minutes. If we need to revoke a customer, we delete their refresh token. Their current access token works for at most 15 more minutes, then they can't get a new one."
+
+> "**How tokens are issued:** Our customers are companies making API calls, so we use the **Client Credentials** flow. The customer sends their client_id and client_secret to our /auth/token endpoint. We verify the credentials against PostgreSQL and return two tokens: an access token (JWT, 15-minute TTL) and a refresh token (opaque string, 7-day TTL, stored in PostgreSQL). When the access token expires, the customer sends the refresh token to /auth/refresh to get a new access token — no need to re-send their secret."
+
+> "**Two — Rate limiting.** Each customer has a cap on how many requests they can send per minute. The gateway checks a Redis counter keyed by the customer_id extracted from the JWT. If they exceed it, the gateway returns an error that says 'you've exceeded your limit, try again in 30 seconds.' This is critical because it prevents any single customer from using up all the system's capacity and degrading service for everyone else."
 
 > "**Three — Routing.** Based on which address the customer called — /realtime or /batch — the gateway sends the request to the appropriate service. This is simple path-based routing: different addresses go to different services."
+
+> "**Important note on batch jobs and short TTLs:** Someone might ask — if a batch job takes 30 minutes and the JWT expires in 15 minutes, don't we have a problem? No. The JWT authenticates the HTTP request, not the background job. The customer sends POST /batch with a JWT. The gateway validates it — that's the only auth check. The batch service creates the job record, writes chunks to Redis Stream, and returns a job_id. The HTTP request is done in under 1 second. Workers then process the job internally using the 'authenticate at boundary, trust internally' pattern — no token needed. When the customer checks back with GET /jobs/{id}/status 30 minutes later, they use a fresh JWT."
 
 ---
 
@@ -173,9 +179,9 @@ GET /v1/jobs/job-456
 
 > "State lives in dedicated external stores:"
 >
-> "**Redis** — for fast, temporary state. Rate limit counters ('customer X has made 47 requests this minute'), session tokens if we need authentication, the embedding cache, and the task queue for batch processing. Redis keeps everything in memory, so lookups take under 1 millisecond."
+> "**Redis** — for fast, temporary state. Rate limit counters ('customer X has made 47 requests this minute'), idempotency keys to prevent duplicate processing, the embedding cache, and the task queue via Redis Streams. Redis keeps everything in memory, so lookups take under 1 millisecond."
 >
-> "**PostgreSQL** — for permanent records. Job status, classification results, customer usage history, billing data. This survives restarts and crashes."
+> "**PostgreSQL** — for permanent records. Customer accounts and JWT signing keys, job status, classification results, customer usage history. This survives restarts and crashes."
 
 **Why stateless matters:**
 
@@ -388,11 +394,11 @@ return results
 
 > "Redis keeps data in the computer's working memory, which makes it extremely fast — under 1 millisecond per lookup. We use it for:"
 
-> "**API key cache** — valid keys cached from PostgreSQL so we don't hit the database on every request."
+> "**Rate limit counters** — tracking how many requests each customer has made in the current time window, keyed by customer_id extracted from the JWT."
 
-> "**Rate limit counters** — tracking how many requests each customer has made in the current time window."
+> "**Idempotency keys** — unique task IDs that prevent duplicate processing. Before a worker processes a chunk, it checks: 'have I already written results for this task ID?' If yes, ACK and skip."
 
-> "**Task queue** — if we use Redis for the batch path queue, tasks live here temporarily until workers consume them."
+> "**Task queue via Redis Streams** — consumer groups distribute batch tasks across workers, with built-in crash recovery via the Pending Entries List."
 
 > "**Embedding cache** — if enabled, this is where cached embeddings live for fast retrieval."
 
@@ -569,3 +575,12 @@ Total workers needed: 3 (2 for embedding, 1 for classification)
 
 **"Why not use a vector database for embeddings?"**
 > "We're not doing similarity search — we're doing exact key-value lookup. 'Give me the embedding for this specific file hash.' That's a simple lookup, not a nearest-neighbor search. Redis handles that perfectly. A vector database would add complexity and cost without benefit for this use case."
+
+**"Why JWT instead of API keys?"**
+> "JWT lets the gateway verify every request without a database round-trip. The token carries customer_id and scopes inside it, signed by our server's key. The gateway just checks the math — no Redis, no PostgreSQL. That's important for a system processing 1,000+ requests per second. The trade-off is revocation is harder — we solve that with short TTLs (15 minutes) and a refresh token flow. If we need to cut off a customer, we delete their refresh token. Worst case they have 15 minutes of access before their current token expires."
+
+**"How do worker nodes verify authentication?"**
+> "They don't. We use the 'authenticate at boundary, trust internally' pattern. The gateway is the only component that checks the JWT. Once the request passes the gateway, internal services trust it. Workers pull tasks from the Redis Stream — those tasks were written by the batch service, which was already authenticated at the gateway. There's no token in the queue message because there doesn't need to be."
+
+**"What if the JWT expires during a long batch job?"**
+> "It doesn't matter. The JWT authenticates the HTTP request, not the background job. The POST /batch request takes under 1 second — the gateway validates the JWT, the batch service writes chunks to the stream, returns a job_id, done. Workers process for 30 minutes using internal trust. When the customer polls GET /jobs/{id}/status, they use a fresh JWT. Each individual HTTP call is short — well within the 15-minute TTL."
