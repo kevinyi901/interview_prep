@@ -155,7 +155,7 @@ GET /v1/jobs/job-456
 
 > "**One — Identity verification.** The customer includes a secret key with every request. The gateway checks that this key is valid and identifies which customer it belongs to. This lets us track usage per customer and bill accordingly."
 
-> "For the key lookup: API keys are stored in **PostgreSQL** as the source of truth — that's where we create keys, associate them with customers, and track permissions. But checking the database on every single request would be slow. So we cache valid keys in **Redis**. The flow is: check Redis first (sub-millisecond), if it's a miss, check PostgreSQL and cache the result. Keys rarely change, so the cache hit rate is nearly 100%."
+> "For the key lookup: API keys and other user session data are stored in **PostgreSQL** as the source of truth — that's where we create keys, associate them with customers, and track permissions. But checking the database on every single request would be slow. So we cache valid keys in **Redis**. The flow is: check Redis first (sub-millisecond), if it's a miss, check PostgreSQL and cache the result. Keys rarely change, so the cache hit rate is nearly 100%."
 
 > "**Two — Rate limiting.** Each customer has a cap on how many requests they can send per minute. If they exceed it, the gateway returns an error that says 'you've exceeded your limit, try again in 30 seconds.' This is critical because it prevents any single customer from using up all the system's capacity and degrading service for everyone else."
 
